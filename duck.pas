@@ -175,6 +175,41 @@ uses System.SysUtils, System.Classes, System.Types, System.Rtti, System.TypInfo,
 
 {$SCOPEDENUMS ON}
 
+{$IFDEF VER330}
+  {$DEFINE RIO}
+  {$DEFINE RIO_UP}
+  {$DEFINE TOKYO_UP}
+  {$DEFINE BERLIN_UP}
+  {$DEFINE SEATTLE_UP}
+  {$DEFINE SUPPORTED_VERSION}
+  {$DEFINE SUPPORTED_VERSION}
+{$ENDIF}
+
+{$IFDEF VER320}
+  {$DEFINE TOKYO}
+  {$DEFINE TOKYO_UP}
+  {$DEFINE BERLIN_UP}
+  {$DEFINE SEATTLE_UP}
+  {$DEFINE SUPPORTED_VERSION}
+{$ENDIF}
+
+{$IFDEF VER310}
+  {$DEFINE BERLIN}
+  {$DEFINE BERLIN_UP}
+  {$DEFINE SEATTLE_UP}
+  {$DEFINE SUPPORTED_VERSION}
+{$ENDIF}
+
+{$IFDEF VER300}
+  {$DEFINE SEATTLE}
+  {$DEFINE SEATTLE_UP}
+  {$DEFINE SUPPORTED_VERSION}
+{$ENDIF}
+
+{$IFNDEF SUPPORTED_VERSION}
+This is not a supported delphi version.
+{$ENDIF}
+
 type
   TNotifyReference = TProc<TObject>;
 
@@ -969,28 +1004,30 @@ end;
 class function TRTTI.isProperty(obj: TObject; const PropertyName: string; OfType : TClass): boolean;
 var
   cxt : TRTTIContext;
-  prop : TRttiMember;
+  prop : TRttiProperty;
+  propix : TRttiIndexedProperty;
 begin
   prop := cxt.GetType(obj.ClassInfo).GetProperty(PropertyName);
-  Result := (prop <> nil) and ((prop.ClassType = OfType) or prop.InheritsFrom(OfType));
+  Result := (prop <> nil) and ((prop.PropertyType.AsInstance.MetaclassType = OfType) or prop.InheritsFrom(OfType));
   if not Result then
   begin
-    prop := cxt.GetType(obj.ClassInfo).GetIndexedProperty(PropertyName);
-    Result := (prop <> nil) and ((prop.ClassType = OfType) or prop.InheritsFrom(OfType));
+    propix := cxt.GetType(obj.ClassInfo).GetIndexedProperty(PropertyName);
+    Result := (propix <> nil) and ((propix.PropertyType.AsInstance.MetaclassType = OfType) or propix.InheritsFrom(OfType));
   end;
 end;
 
 class function TRTTI.isProperty(pti : PTypeInfo; const PropertyName: string; OfType : TClass): boolean;
 var
   cxt : TRTTIContext;
-  prop : TRttiMember;
+  prop : TRttiProperty;
+  propix : TRttiIndexedProperty;
 begin
   prop := cxt.GetType(pti).GetProperty(PropertyName);
-  Result := (prop <> nil) and ((prop.ClassType = OfType) or prop.InheritsFrom(OfType));
+  Result := (prop <> nil) and ((prop.PropertyType.AsInstance.MetaclassType = OfType) or prop.InheritsFrom(OfType));
   if not Result then
   begin
-    prop := cxt.GetType(pti).GetIndexedProperty(PropertyName);
-    Result := (prop <> nil) and ((prop.ClassType = OfType) or prop.InheritsFrom(OfType));
+    propix := cxt.GetType(pti).GetIndexedProperty(PropertyName);
+    Result := (propix <> nil) and ((propix.PropertyType.AsInstance.MetaclassType = OfType) or propix.InheritsFrom(OfType));
   end;
 end;
 
@@ -2607,80 +2644,94 @@ begin
 
   FillChar(Strings, SizeOf(Strings), 0);
   VarParams := GetDispatchInvokeArgs(CallDesc, Params, Strings, true);
+  try
 
-  // What type of invoke is this?
-  case CallDesc^.CallType of
-    CPropertyGet: begin
-      if ((Dest <> nil) and                         // there must be a dest
-              (LArgCount = 0)) then                       // only no args
-      begin
-        v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent).AsVariant;
-        if VarIsNull(v) then
-          RaiseDispError;
-        Variant(Dest^) := v;
-      end else
-      begin
-        if not ((Dest <> nil) and                         // there must be a dest
-              (LArgCount = 1)) then
-          RaiseDispError;
-        setLength(args,1);
-        args[0] := TValue.FromVariant(Variant(VarParams[0]));
-        v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent,args).AsVariant;
-        if VarIsNull(v) then
-          RaiseDispError;
-        Variant(Dest^) := v;
+    // What type of invoke is this?
+    case CallDesc^.CallType of
+      CPropertyGet: begin
+        if ((Dest <> nil) and                         // there must be a dest
+                (LArgCount = 0)) then                       // only no args
+        begin
+          v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent).AsVariant;
+          if VarIsNull(v) then
+            RaiseDispError;
+          Variant(Dest^) := v;
+        end else
+        begin
+          if not ((Dest <> nil) and                         // there must be a dest
+                (LArgCount = 1)) then
+            RaiseDispError;
+          setLength(args,1);
+          args[0] := TValue.FromVariant(Variant(VarParams[0]));
+          v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent,args).AsVariant;
+          if VarIsNull(v) then
+            RaiseDispError;
+          Variant(Dest^) := v;
+        end;
       end;
-    end;
-    CPropertySet:
-      if ((Dest = nil) and                         // there must be a dest
-          (LArgCount = 1)) then
+      CPropertySet:
+        if ((Dest = nil) and                         // there must be a dest
+            (LArgCount = 1)) then
+        begin
+          setLength(args,1);
+          args[0] := TValue.FromVariant(Variant(VarParams[0]));
+          TRTTI.setValue(TDuckVarData(Source).VDuck.obj,LCasedIdent,args,TValue.FromVariant(Variant(VarParams[0])));
+        end else
+        begin
+          RaiseDispError;
+          (*if not ((Dest = nil) {and                         // there must be a dest
+                (LArgCount = 2))} then
+            RaiseDispError;
+          setLength(args,LArgCount);
+          for i := 0 to LArgCount-1 do
+            args[i] := TValue.FromVariant((Variant(VarParams[i]));
+          TDuckVarData(Source).VDuck.setTo(LCasedIdent,TValue.FromVariant(Variant(VarParams[0]));*)
+        end;
+    else
+      if ((Dest <> nil) and                         // there must be a dest
+          (LArgCount = 0)) then                       // only no args
       begin
-        setLength(args,1);
-        args[0] := TValue.FromVariant(Variant(VarParams[0]));
-        TRTTI.setValue(TDuckVarData(Source).VDuck.obj,LCasedIdent,args,TValue.FromVariant(Variant(VarParams[0])));
+        v := NULL;
+        setLength(args,0);
+        if TRTTI.isProperty(TDuckVarData(Source).VDuck.obj,LCasedIdent) then
+          v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent).AsVariant
+        else if TRTTI.isMethod(TDuckVarData(Source).VDuck.obj,LCasedIdent) then
+          v := TRTTI.call(TDuckVarData(Source).VDuck.obj,LCasedIdent, args).AsVariant;
+
+        if VarIsNull(v) then
+            RaiseDispError;
+          Variant(Dest^) := v;
       end else
       begin
-        RaiseDispError;
-        (*if not ((Dest = nil) {and                         // there must be a dest
-              (LArgCount = 2))} then
-          RaiseDispError;
         setLength(args,LArgCount);
         for i := 0 to LArgCount-1 do
-          args[i] := TValue.FromVariant((Variant(VarParams[i]));
-        TDuckVarData(Source).VDuck.setTo(LCasedIdent,TValue.FromVariant(Variant(VarParams[0]));*)
-      end;
-  else
-    if ((Dest <> nil) and                         // there must be a dest
-        (LArgCount = 0)) then                       // only no args
-    begin
-      v := NULL;
-      setLength(args,0);
-      if TRTTI.isProperty(TDuckVarData(Source).VDuck.obj,LCasedIdent) then
-        v := TRTTI.getValue(TDuckVarData(Source).VDuck.obj,LCasedIdent).AsVariant
-      else if TRTTI.isMethod(TDuckVarData(Source).VDuck.obj,LCasedIdent) then
-        v := TRTTI.call(TDuckVarData(Source).VDuck.obj,LCasedIdent, args).AsVariant;
+          args[i] := TValue.FromVariant(Variant(VarParams[i]));
+        v := TRTTI.call(TDuckVarData(Source).VDuck.obj,LCasedIdent,args).AsVariant;
 
-      if VarIsNull(v) then
-          RaiseDispError;
         Variant(Dest^) := v;
-    end else
-    begin
-      setLength(args,LArgCount);
-      for i := 0 to LArgCount-1 do
-        args[i] := TValue.FromVariant(Variant(VarParams[i]));
-      v := TRTTI.call(TDuckVarData(Source).VDuck.obj,LCasedIdent,args).AsVariant;
-
-      Variant(Dest^) := v;
-      exit;
+        exit;
+      end;
     end;
+  finally
+    FinalizeDispatchInvokeArgs(CallDesc, VarParams, true);
   end;
 
   for I := 0 to Length(Strings) - 1 do
   begin
     if Pointer(Strings[I].Wide) = nil then
       Break;
+    {$IFNDEF SEATTLE}
+    {$IFDEF NEXTGEN}
+    if Strings[I].UTF8 <> nil then
+      Strings[I].UTF8^ := UTF8String(Strings[I].UTF8)
+    {$ELSE}
     if Strings[I].Ansi <> nil then
-      Strings[I].Ansi^ := String(Strings[I].Wide)
+      Strings[I].Ansi^ := AnsiString(Strings[I].Wide)
+    {$ENDIF}
+    {$ELSE}
+    if Strings[I].Ansi <> nil then
+      Strings[I].Ansi^ := UnicodeString(Strings[I].Ansi)
+    {$ENDIF}
     else if Strings[I].Unicode <> nil then
       Strings[I].Unicode^ := UnicodeString(Strings[I].Wide)
   end;
@@ -2832,7 +2883,6 @@ begin
 
   m := t.GetMethod(FMethodName);
   if (m.DispatchKind = dkVtable) and (m.MethodKind in [mkFunction, mkProcedure]) and m.HasExtendedInfo then
-//  if (m.DispatchKind in [dkVtable, dkDynamic]) and (m.MethodKind in [mkFunction, mkProcedure]) and m.HasExtendedInfo then
     FIntercept := TInterceptInfo.Create(PVtable(FOriginalClass)[m.VirtualIndex], m, FImplementationCallback)
   else
     raise System.SysUtils.Exception.Create('Specified Method cannot be intercepted.');
