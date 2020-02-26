@@ -2832,6 +2832,7 @@ begin
 
   m := t.GetMethod(FMethodName);
   if (m.DispatchKind = dkVtable) and (m.MethodKind in [mkFunction, mkProcedure]) and m.HasExtendedInfo then
+//  if (m.DispatchKind in [dkVtable, dkDynamic]) and (m.MethodKind in [mkFunction, mkProcedure]) and m.HasExtendedInfo then
     FIntercept := TInterceptInfo.Create(PVtable(FOriginalClass)[m.VirtualIndex], m, FImplementationCallback)
   else
     raise System.SysUtils.Exception.Create('Specified Method cannot be intercepted.');

@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Menus, duck,
-  Vcl.ExtCtrls;
+  Vcl.ExtCtrls, System.Generics.collections, System.Rtti;
 
 type
   {$M+}
@@ -25,6 +25,16 @@ type
     function add(A,B : single) : single; overload;
   end;
 
+  TPai = class(TObject)
+  public
+    function Soma(A, b: Integer): Integer; virtual; Abstract;
+  end;
+
+  TFilho = class(TPai)
+  public
+    function Soma(A, b: Integer): Integer; override;
+  end;
+
   TForm1 = class(TForm)
     Label1: TLabel;
     Memo1: TMemo;
@@ -40,6 +50,8 @@ type
     Button5: TButton;
     Button6: TButton;
     Button7: TButton;
+    Button8: TButton;
+    Button9: TButton;
     procedure Button1Click(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure CheckBox1Click(Sender: TObject);
@@ -49,10 +61,18 @@ type
     procedure Button5Click(Sender: TObject);
     procedure Button6Click(Sender: TObject);
     procedure Button7Click(Sender: TObject);
+    procedure Button8Click(Sender: TObject);
+    procedure Button9Click(Sender: TObject);
+    procedure TESTE(aMsg:String);
+    procedure FormCreate(Sender: TObject);
   private
     { Private declarations }
+
+
+    procedure btn8AnteClick(Args : TArray<TValue>; var Continue : boolean);
   public
     { Public declarations }
+    vAdder:TFilho;
   end;
 
 var
@@ -62,10 +82,25 @@ implementation
 
 {$R *.dfm}
 
+procedure TForm1.btn8AnteClick(Args: TArray<TValue>; var Continue: boolean);
+begin
+  Memo1.Lines.Add('Click Botao 8 - Antes');
+  try
+    Memo1.Lines.Add(Args[0].ToString);
+    Memo1.Lines.Add(Args[1].ToString);
+    Memo1.Lines.Add(Args[2].ToString);
+    Memo1.Lines.Add(Args[3].ToString);
+  except
+
+  end;
+
+end;
+
 procedure TForm1.Button1Click(Sender: TObject);
 begin
   // Use duck typing to hide all controls with a visible property.  Start a timer
   // to show it again after 3 seconds.
+
   Self.Duck.all.has('Visible').setTo(false);
   Timer1.Enabled := True;
 end;
@@ -177,12 +212,34 @@ begin
 
 end;
 
+procedure TForm1.Button8Click(Sender: TObject);
+begin
+  Button8.Caption := Button8.Caption + 'X';
+  TESTE(FormatDateTime('hh:mm:ss', Now));
+  vAdder.Soma(5, 6);
+end;
+
+procedure TForm1.Button9Click(Sender: TObject);
+begin
+  vAdder.duck.intercept('Soma').before(btn8AnteClick);
+end;
+
 procedure TForm1.CheckBox1Click(Sender: TObject);
 begin
   // Each time the checkbox is clicked, text will be added to each control that
   // has a text property.
   CheckBox1.Checked := False;
   Self.duck.all.has('text').add(CheckBox1.Caption);
+end;
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  vAdder := TFilho.Create;
+end;
+
+procedure TForm1.TESTE(aMsg:String);
+begin
+  Button1.Caption := aMsg;
 end;
 
 procedure TForm1.Timer1Timer(Sender: TObject);
@@ -202,6 +259,13 @@ end;
 function TMyAdder.add(A, B: single): single;
 begin
   Result := a+b;
+end;
+
+{ TFilho }
+
+function TFilho.Soma(A, b: Integer): Integer;
+begin
+  Result := A+b;
 end;
 
 end.
